@@ -13,6 +13,8 @@ from torch.nn.modules.batchnorm import _BatchNorm
 from basicsr.ops.dcn import ModulatedDeformConvPack, modulated_deform_conv
 from basicsr.utils import get_root_logger
 
+#new
+#from torch.nn import init
 
 @torch.no_grad()
 def default_init_weights(module_list, scale=1, bias_fill=0, **kwargs):
@@ -311,3 +313,30 @@ to_2tuple = _ntuple(2)
 to_3tuple = _ntuple(3)
 to_4tuple = _ntuple(4)
 to_ntuple = _ntuple
+
+#new
+### initalize the module
+def init_weights(net, init_type='normal'):
+    #print('initialization method [%s]' % init_type)
+    if init_type == 'kaiming':
+        net.apply(weights_init_kaiming)
+    else:
+        raise NotImplementedError('initialization method [%s] is not implemented' % init_type)
+
+def weights_init_kaiming(m):
+    classname = m.__class__.__name__
+    #print(classname)
+    if classname.find('Conv') != -1:
+        init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
+    elif classname.find('Linear') != -1:
+        init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
+    elif classname.find('BatchNorm') != -1:
+        init.normal_(m.weight.data, 1.0, 0.02)
+        init.constant_(m.bias.data, 0.0)
+
+### compute model params
+def count_param(model):
+    param_count = 0
+    for param in model.parameters():
+        param_count += param.view(-1).size()[0]
+    return param_count
