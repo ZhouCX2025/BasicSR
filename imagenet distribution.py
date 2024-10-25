@@ -17,34 +17,49 @@ os.system('mv ILSVRC2012_img_train ' + path)
 
 
 
-#load the ImageNet dataset
-data_dir = 'C:\Users\zhouc\.vscode\VS_python\BasicSR\imagenet'
-Image_dataset = datasets.ImageFolder(data_dir, transforms.ToTensor())
-Image_loader = DataLoader(Image_dataset, batch_size=1, shuffle=True)
+#load the ImageNet dataset. Batch size is the whole dataset. Shuffle the dataset.
+Image_transform = transforms.Compose([transforms.Resize((256, 256)), transforms.ToTensor()])
+Image_dataset = datasets.ImageFolder(path, transform=Image_transform)
+Image_loader = DataLoader(Image_dataset, batch_size=len(Image_dataset), shuffle=True)
 
 
 
 
-#calculate the distrivution of Lab color distribution of pixels in the images in the ImageNet dataset. (quantize ab color space with a grid size of 10x10. A total of 313 bins are obtained, and the distribution of each bin is calculated.)
-def get_ab_distribution(loader, grid_size=10):
-    ab_distribution = np.zeros((grid_size, grid_size))
-    for i, (img, _) in enumerate(loader):
-        img = img.squeeze().numpy()
-        img = np.transpose(img, (1, 2, 0))
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2Lab)
-        ab = img[:, :, 1:3]
-        ab = cv2.resize(ab, (grid_size, grid_size), interpolation=cv2.INTER_NEAREST)
-        ab = np.floor(ab).astype(np.int)
-        for i in range(grid_size):
-            for j in range(grid_size):
-                ab_distribution[i, j] += np.sum((ab[:, :, 0] == i) & (ab[:, :, 1] == j))
-    return ab_distribution
 
-Image_ab_distribution = get_ab_distribution(Image_loader)
+#Use Lab colorspace to represent all images in the imagenet. Ignore the L channel.
+def rgb2lab(rgb):
+    assert rgb.shape[1] == 3
+    num_pixels = rgb.shape[0]
+    rgb = rgb.reshape(num_pixels, 1, 1, 3)
+    lab = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB)
+    lab = lab.reshape(num_pixels, 3)
+    return lab
+#Use the ab channel to represent the color of the image.
+def rgb2ab(rgb):
+    lab = rgb2lab(rgb)
+    return lab[:, 1:3]
+#Quantize the a channel color space into 10 bins.
+def quantize_a(a):
+    return np.digitize(a, np.linspace(0, 100, 10)) - 1
+#Quantize the b channel color space into 10 bins.
+def quantize_b(b):
+    return np.digitize(b, np.linspace(-128, 127, 10)) - 1
 
-#plot the distribution of Lab color distribution of pixels in the images in the ImageNet dataset.
-plt.figure(figsize=(10, 5))
-plt.subplot(1, 2, 1)
-plt.imshow(Image_ab_distribution, cmap='hot')
-plt.title('Dataset')
-plt.show()
+
+# Calculate the distribution of colors of pixels of images in ImageNet with a quantized ab channel color space, which has 10 *10 bins.
+#The distribution is the number of pixels that fall into each bin.
+def calculate_distribution():
+    distribution = np.zeros((10, 10))
+    for i, (images, _) in enumerate(Image_loader):
+        images = images.numpy()
+        ab = rgb2ab(images)
+        a = ab[:, 0]
+        b = ab[:, 1]
+        a = quantize_a(a)
+        b = quantize_b(b)
+        for i in range(a.shape[0]):
+            distribution[a[i], b[i]] += 1
+    return distribution
+distribution = calculate_distribution()
+
+
